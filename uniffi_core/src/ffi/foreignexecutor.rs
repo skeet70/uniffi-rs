@@ -4,17 +4,9 @@
 
 //! Schedule tasks using a foreign executor.
 
-use std::{
-    cell::UnsafeCell,
-    future::Future,
-    panic,
-    pin::Pin,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Mutex,
-    },
-    task::{Context, Poll, Waker},
-};
+use std::panic;
+
+use crate::{ForeignExecutorCallback, ForeignExecutorCallbackCell};
 
 /// Opaque handle for a foreign task executor.
 ///
@@ -28,25 +20,6 @@ pub struct ForeignExecutorHandle(pub(crate) *const ());
 unsafe impl Send for ForeignExecutorHandle {}
 
 unsafe impl Sync for ForeignExecutorHandle {}
-
-/// Callback to schedule a Rust call with a `ForeignExecutor`. The bindings code registers exactly
-/// one of these with the Rust code.
-///
-/// Delay is an approximate amount of ms to wait before scheduling the call.  Delay is usually 0,
-/// which means schedule sometime soon.
-///
-/// As a special case, when Rust drops the foreign executor, with 'task=null'`.  The foreign
-/// bindings should release the reference to the executor that was reserved for Rust.
-///
-/// This callback can be invoked from any thread, including threads created by Rust.
-///
-/// The callback should return one of the `ForeignExecutorCallbackResult` values.
-pub type ForeignExecutorCallback = extern "C" fn(
-    executor: ForeignExecutorHandle,
-    delay: u32,
-    task: Option<RustTaskCallback>,
-    task_data: *const (),
-) -> i8;
 
 /// Result code returned by `ForeignExecutorCallback`
 #[repr(i8)]
@@ -111,22 +84,12 @@ pub enum RustTaskCallbackCode {
     Cancelled = 1,
 }
 
-static FOREIGN_EXECUTOR_CALLBACK: AtomicUsize = AtomicUsize::new(0);
+static FOREIGN_EXECUTOR_CALLBACK: ForeignExecutorCallbackCell = ForeignExecutorCallbackCell::new();
 
 /// Set the global ForeignExecutorCallback.  This is called by the foreign bindings, normally
 /// during initialization.
-#[no_mangle]
-pub extern "C" fn uniffi_foreign_executor_callback_set(callback: ForeignExecutorCallback) {
-    FOREIGN_EXECUTOR_CALLBACK.store(callback as usize, Ordering::Relaxed);
-}
-
-fn get_foreign_executor_callback() -> ForeignExecutorCallback {
-    match FOREIGN_EXECUTOR_CALLBACK.load(Ordering::Relaxed) {
-        0 => panic!("FOREIGN_EXECUTOR_CALLBACK not set"),
-        // SAFETY: The below call is okay because we only store values in
-        // FOREIGN_EXECUTOR_CALLBACK that were cast from a ForeignExecutorCallback.
-        n => unsafe { std::mem::transmute(n) },
-    }
+pub fn foreign_executor_callback_set(callback: ForeignExecutorCallback) {
+    FOREIGN_EXECUTOR_CALLBACK.set(callback);
 }
 
 /// Schedule Rust calls using a foreign executor
@@ -150,7 +113,19 @@ impl ForeignExecutor {
     ///   - 'static: since it runs at an arbitrary time, so all references need to be 'static
     ///   - panic::UnwindSafe: if the closure panics, it should not corrupt any data
     pub fn schedule<F: FnOnce() + Send + 'static + panic::UnwindSafe>(&self, delay: u32, task: F) {
-        ScheduledTask::new(task).schedule_callback(self.handle, delay)
+        let leaked_ptr: *mut F = Box::leak(Box::new(task));
+        if !schedule_raw(
+            self.handle,
+            delay,
+            schedule_callback::<F>,
+            leaked_ptr as *const (),
+        ) {
+            // If schedule_raw() failed, drop the leaked box since `schedule_callback()` has not been
+            // scheduled to run.
+            unsafe {
+                drop(Box::<F>::from_raw(leaked_ptr));
+            };
+        }
     }
 
     /// Schedule a closure to be run and get a Future for the result
@@ -159,14 +134,28 @@ impl ForeignExecutor {
     ///   - Send: since the closure will likely run on a different thread
     ///   - 'static: since it runs at an arbitrary time, so all references need to be 'static
     ///   - panic::UnwindSafe: if the closure panics, it should not corrupt any data
-    pub fn run<F: FnOnce() -> T + Send + 'static + panic::UnwindSafe, T>(
-        &self,
-        delay: u32,
-        closure: F,
-    ) -> impl Future<Output = T> {
-        let future = RunFuture::new(closure);
-        future.schedule_callback(self.handle, delay);
-        future
+    pub async fn run<F, T>(&self, delay: u32, closure: F) -> T
+    where
+        F: FnOnce() -> T + Send + 'static + panic::UnwindSafe,
+        T: Send + 'static,
+    {
+        // Create a oneshot channel to handle the future
+        let (sender, receiver) = oneshot::channel();
+        // We can use `AssertUnwindSafe` here because:
+        //   - The closure is unwind safe
+        //   - `Sender` is not marked unwind safe, maybe this is just an oversight in the oneshot
+        //     library.  However, calling `send()` and dropping the Sender should certainly be
+        //     unwind safe.  `send()` should probably not panic at all and if it does it shouldn't
+        //     do it in a way that breaks the Receiver.
+        //   - Calling `expect` may result in a panic, but this should should not break either the
+        //     Sender or Receiver.
+        self.schedule(
+            delay,
+            panic::AssertUnwindSafe(move || {
+                sender.send(closure()).expect("Error sending future result")
+            }),
+        );
+        receiver.await.expect("Error receiving future result")
     }
 }
 
@@ -182,128 +171,25 @@ pub(crate) fn schedule_raw(
     callback: RustTaskCallback,
     data: *const (),
 ) -> bool {
-    let result_code = (get_foreign_executor_callback())(handle, delay, Some(callback), data);
+    let result_code = (FOREIGN_EXECUTOR_CALLBACK.get())(handle, delay, Some(callback), data);
     ForeignExecutorCallbackResult::check_result_code(result_code)
 }
 
 impl Drop for ForeignExecutor {
     fn drop(&mut self) {
-        (get_foreign_executor_callback())(self.handle, 0, None, std::ptr::null());
+        (FOREIGN_EXECUTOR_CALLBACK.get())(self.handle, 0, None, std::ptr::null());
     }
 }
-/// Struct that handles the ForeignExecutor::schedule() method
-struct ScheduledTask<F> {
-    task: F,
-}
 
-impl<F> ScheduledTask<F>
+extern "C" fn schedule_callback<F>(data: *const (), status_code: RustTaskCallbackCode)
 where
     F: FnOnce() + Send + 'static + panic::UnwindSafe,
 {
-    fn new(task: F) -> Self {
-        Self { task }
-    }
-
-    fn schedule_callback(self, handle: ForeignExecutorHandle, delay: u32) {
-        let leaked_ptr: *mut Self = Box::leak(Box::new(self));
-        if !schedule_raw(handle, delay, Self::callback, leaked_ptr as *const ()) {
-            // If schedule_raw() failed, drop the leaked box since `Self::callback()` has not been
-            // scheduled to run.
-            unsafe {
-                // Note: specifying the Box generic is a good safety measure.  Things would go very
-                // bad if Rust inferred the wrong type.
-                drop(Box::<Self>::from_raw(leaked_ptr));
-            };
-        }
-    }
-
-    extern "C" fn callback(data: *const (), status_code: RustTaskCallbackCode) {
-        // No matter what, we need to call Box::from_raw() to balance the Box::leak() call.
-        let scheduled_task = unsafe { Box::from_raw(data as *mut Self) };
-        if status_code == RustTaskCallbackCode::Success {
-            run_task(scheduled_task.task);
-        }
-    }
-}
-
-/// Struct that handles the ForeignExecutor::run() method
-struct RunFuture<T, F> {
-    inner: Arc<RunFutureInner<T, F>>,
-}
-
-// State inside the RunFuture Arc<>
-struct RunFutureInner<T, F> {
-    // SAFETY: we only access this once in the scheduled callback
-    task: UnsafeCell<Option<F>>,
-    mutex: Mutex<RunFutureInner2<T>>,
-}
-
-// State inside the RunFuture Mutex<>
-struct RunFutureInner2<T> {
-    result: Option<T>,
-    waker: Option<Waker>,
-}
-
-impl<T, F> RunFuture<T, F>
-where
-    F: FnOnce() -> T + Send + 'static + panic::UnwindSafe,
-{
-    fn new(task: F) -> Self {
-        Self {
-            inner: Arc::new(RunFutureInner {
-                task: UnsafeCell::new(Some(task)),
-                mutex: Mutex::new(RunFutureInner2 {
-                    result: None,
-                    waker: None,
-                }),
-            }),
-        }
-    }
-
-    fn schedule_callback(&self, handle: ForeignExecutorHandle, delay: u32) {
-        let raw_ptr = Arc::into_raw(Arc::clone(&self.inner));
-        if !schedule_raw(handle, delay, Self::callback, raw_ptr as *const ()) {
-            // If `schedule_raw()` failed, make sure to decrement the ref count since
-            // `Self::callback()` has not been scheduled to run.
-            unsafe {
-                // Note: specifying the Arc generic is a good safety measure.  Things would go very
-                // bad if Rust inferred the wrong type.
-                Arc::<RunFutureInner<T, F>>::decrement_strong_count(raw_ptr);
-            };
-        }
-    }
-
-    extern "C" fn callback(data: *const (), status_code: RustTaskCallbackCode) {
-        // No matter what, call `Arc::from_raw()` to balance the `Arc::into_raw()` call in
-        // `schedule_callback()`.
-        let inner = unsafe { Arc::from_raw(data as *const RunFutureInner<T, F>) };
-
-        // Only drive the future forward on `RustTaskCallbackCode::Success`.
-        if status_code == RustTaskCallbackCode::Success {
-            let task = unsafe { (*inner.task.get()).take().unwrap() };
-            if let Some(result) = run_task(task) {
-                let mut inner2 = inner.mutex.lock().unwrap();
-                inner2.result = Some(result);
-                if let Some(waker) = inner2.waker.take() {
-                    waker.wake();
-                }
-            }
-        }
-    }
-}
-
-impl<T, F> Future for RunFuture<T, F> {
-    type Output = T;
-
-    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<T> {
-        let mut inner2 = self.inner.mutex.lock().unwrap();
-        match inner2.result.take() {
-            Some(v) => Poll::Ready(v),
-            None => {
-                inner2.waker = Some(context.waker().clone());
-                Poll::Pending
-            }
-        }
+    // No matter what, we need to call Box::from_raw() to balance the Box::leak() call.
+    let task = unsafe { Box::from_raw(data as *mut F) };
+    // Skip running the task for the `RustTaskCallbackCode::Cancelled` code
+    if status_code == RustTaskCallbackCode::Success {
+        run_task(task);
     }
 }
 
@@ -333,11 +219,15 @@ pub use test::MockEventLoop;
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::sync::{
-        atomic::{AtomicU32, Ordering},
-        Once,
+    use std::{
+        future::Future,
+        pin::Pin,
+        sync::{
+            atomic::{AtomicU32, Ordering},
+            Arc, Mutex, Once,
+        },
+        task::{Context, Poll, Wake, Waker},
     };
-    use std::task::Wake;
 
     /// Simulate an event loop / task queue / coroutine scope on the foreign side
     ///
@@ -362,7 +252,7 @@ mod test {
         pub fn new() -> Arc<Self> {
             // Make sure we install a foreign executor callback that can deal with mock event loops
             FOREIGN_EXECUTOR_CALLBACK_INIT
-                .call_once(|| uniffi_foreign_executor_callback_set(mock_executor_callback));
+                .call_once(|| foreign_executor_callback_set(mock_executor_callback));
 
             Arc::new(Self {
                 inner: Mutex::new(MockEventLoopInner {
@@ -504,17 +394,24 @@ mod test {
         assert_eq!(eventloop.call_count(), 0);
 
         let mut future = executor.run(0, move || "test-return-value");
+        unsafe {
+            assert_eq!(
+                Pin::new_unchecked(&mut future).poll(&mut context),
+                Poll::Pending
+            );
+        }
         assert_eq!(eventloop.call_count(), 1);
-        assert_eq!(Pin::new(&mut future).poll(&mut context), Poll::Pending);
         assert_eq!(mock_waker.wake_count.load(Ordering::Relaxed), 0);
 
         eventloop.run_all_calls();
         assert_eq!(eventloop.call_count(), 0);
         assert_eq!(mock_waker.wake_count.load(Ordering::Relaxed), 1);
-        assert_eq!(
-            Pin::new(&mut future).poll(&mut context),
-            Poll::Ready("test-return-value")
-        );
+        unsafe {
+            assert_eq!(
+                Pin::new_unchecked(&mut future).poll(&mut context),
+                Poll::Ready("test-return-value")
+            );
+        }
     }
 
     #[test]
