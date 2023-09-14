@@ -51,6 +51,8 @@ test suite you will need:
   * `ktlint`, the [Kotlin linter used to format the generated bindings](https://ktlint.github.io/).
   * The [Java Native Access](https://github.com/java-native-access/jna#download) JAR downloaded and its path
     added to your `$CLASSPATH` environment variable.
+  * The [Kotlinx Coroutines Core](https://github.com/Kotlin/kotlinx.coroutines#using-in-your-projects) JAR downloaded and its path
+    added to your `$CLASSPATH` environment variable.
 * Swift:
   * `swift` and `swiftc`, the [Swift command-line tools](https://swift.org/download/).
   * The Swift `Foundation` package.

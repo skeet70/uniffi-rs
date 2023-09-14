@@ -37,6 +37,8 @@ If you want to try them out, you will need:
 * The [Kotlin command-line tools](https://kotlinlang.org/docs/tutorials/command-line.html), particularly `kotlinc`.
 * The [Java Native Access](https://github.com/java-native-access/jna#download) JAR downloaded and its path
   added to your `$CLASSPATH` environment variable.
+* The [Kotlinx Coroutines Core](https://github.com/Kotlin/kotlinx.coroutines#using-in-your-projects) JAR downloaded and its path
+added to your `$CLASSPATH` environment variable.
 * Python 3
 * The [Swift command-line tools](https://swift.org/download/), particularly `swift`, `swiftc` and
   the `Foundation` package.

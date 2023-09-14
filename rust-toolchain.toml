@@ -12,6 +12,6 @@ targets = [
     "i686-linux-android",
     "x86_64-linux-android",
     "aarch64-apple-ios",
-    "x86_64-apple-ios"
+    "x86_64-apple-ios",
 ]
-components = ["clippy", "rustfmt"]
+components = ["clippy", "rustfmt", "rust-src"]
