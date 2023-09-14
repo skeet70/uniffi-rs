@@ -101,6 +101,9 @@ fn compile_swift_module<T: AsRef<OsStr>>(
         .arg(out_dir)
         .arg("-L")
         .arg(out_dir)
+        .arg("-target")
+        // TODO(murph): how to get it to infer this instead of x86_64-pc-linux-gnu
+        .arg("x86_64-unknown-linux-gnu")
         .args(calc_library_args(out_dir)?)
         .args(sources);
     let status = command

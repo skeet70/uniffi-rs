@@ -163,6 +163,56 @@ pub unsafe trait FfiConverter<UT>: Sized {
     const TYPE_ID_META: MetadataBuffer;
 }
 
+/// FfiConverter for Refs
+pub unsafe trait FfiConverterRef<UT>: Send + Sync {
+    type FfiType;
+    type ReturnType: FfiDefault;
+    type FutureCallback: Copy; // TODO(murph): probably not right
+    type FfiConverter: FfiConverter<UT>;
+
+    const TYPE_ID_META: MetadataBuffer;
+}
+
+unsafe impl<T, UT> FfiConverter<UT> for &T
+where
+    T: FfiConverterRef<UT>,
+{
+    type FfiType = T::FfiType;
+    type ReturnType = T::ReturnType;
+    type FutureCallback = T::FutureCallback;
+
+    fn lower(obj: Self) -> Self::FfiType {
+        todo!()
+    }
+
+    fn lower_return(obj: Self) -> Result<Self::ReturnType, RustBuffer> {
+        todo!()
+    }
+
+    fn try_lift(v: Self::FfiType) -> Result<Self> {
+        todo!()
+    }
+
+    fn write(obj: Self, buf: &mut Vec<u8>) {
+        todo!()
+    }
+
+    fn try_read(buf: &mut &[u8]) -> Result<Self> {
+        todo!()
+    }
+
+    fn invoke_future_callback(
+        callback: Self::FutureCallback,
+        callback_data: *const (),
+        return_value: Self::ReturnType,
+        call_status: RustCallStatus,
+    ) {
+        todo!()
+    }
+
+    const TYPE_ID_META: MetadataBuffer = T::TYPE_ID_META;
+}
+
 /// FfiConverter for Arc-types
 ///
 /// This trait gets around the orphan rule limitations, which prevent library crates from
