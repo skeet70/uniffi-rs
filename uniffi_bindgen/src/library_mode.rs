@@ -76,7 +76,12 @@ pub fn generate_bindings(
         }
     }
 
-    for source in sources.iter() {
+    for source in sources.iter_mut() {
+        if source.config.bindings.doc_comments.unwrap_or_default() {
+            let path = &source.package.manifest_path.with_file_name("src/lib.rs");
+            let documentation = uniffi_docs::extract_documentation_from_path(path)?;
+            source.ci.attach_documentation(documentation);
+        }
         for &language in target_languages {
             if cdylib_name.is_none() && language != TargetLanguage::Swift {
                 bail!("Generate bindings for {language} requires a cdylib, but {library_path} was given");
