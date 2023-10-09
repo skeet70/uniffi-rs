@@ -100,13 +100,12 @@ pub fn generate_external_bindings<T: BindingGenerator>(
         }
     }
 
-    if source.config.bindings.doc_comments.unwrap_or_default() {
-        let path = &source.package.manifest_path.with_file_name("src/lib.rs");
-        let documentation = uniffi_docs::extract_documentation_from_path(path)?;
-        source.ci.attach_documentation(documentation);
-    }
-
-    for source in sources.iter() {
+    for source in sources.iter_mut() {
+        if source.config.doc_generation_enabled() {
+            let path = &source.package.manifest_path.with_file_name("src/lib.rs");
+            let documentation = uniffi_docs::extract_documentation_from_path(path)?;
+            source.ci.attach_documentation(documentation);
+        }
         binding_generator.write_bindings(&source.ci, &source.config, out_dir)?;
     }
 
