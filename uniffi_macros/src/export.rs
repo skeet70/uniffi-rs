@@ -10,10 +10,13 @@ mod attributes;
 mod callback_interface;
 mod item;
 mod scaffolding;
+mod utrait;
 
 use self::{
     item::{ExportItem, ImplItem},
-    scaffolding::{gen_constructor_scaffolding, gen_fn_scaffolding, gen_method_scaffolding},
+    scaffolding::{
+        gen_constructor_scaffolding, gen_ffi_function, gen_fn_scaffolding, gen_method_scaffolding,
+    },
 };
 use crate::{
     object::interface_meta_static_var,
@@ -169,6 +172,13 @@ pub(crate) fn expand_export(
                 #(#metadata_items)*
             })
         }
+        ExportItem::Struct {
+            self_ident,
+            uniffi_traits,
+        } => {
+            assert!(!udl_mode);
+            utrait::expand_uniffi_trait_export(self_ident, uniffi_traits)
+        }
     }
 }
 
@@ -190,8 +200,6 @@ pub(crate) fn ffi_converter_trait_impl(trait_ident: &Ident, udl_mode: bool) -> T
 
         unsafe #impl_spec {
             type FfiType = *const ::std::os::raw::c_void;
-            type ReturnType = Self::FfiType;
-            type FutureCallback = ::uniffi::FutureCallback<Self::ReturnType>;
 
             fn lower(obj: ::std::sync::Arc<Self>) -> Self::FfiType {
                 ::std::boxed::Box::into_raw(::std::boxed::Box::new(obj)) as *const ::std::os::raw::c_void
@@ -218,26 +226,13 @@ pub(crate) fn ffi_converter_trait_impl(trait_ident: &Ident, udl_mode: bool) -> T
                     ::uniffi::deps::bytes::Buf::get_u64(buf) as Self::FfiType)
             }
 
-            fn lower_return(v: ::std::sync::Arc<Self>) -> ::std::result::Result<Self::FfiType, ::uniffi::RustBuffer> {
-                Ok(<Self as ::uniffi::FfiConverterArc<crate::UniFfiTag>>::lower(v))
-            }
-
-            fn invoke_future_callback(
-                callback: Self::FutureCallback,
-                callback_data: *const (),
-                return_value: Self::ReturnType,
-                call_status: ::uniffi::RustCallStatus,
-            ) {
-                callback(callback_data, return_value, call_status);
-            }
-
             const TYPE_ID_META: ::uniffi::MetadataBuffer = ::uniffi::MetadataBuffer::from_code(::uniffi::metadata::codes::TYPE_INTERFACE)
                 .concat_str(#mod_path)
                 .concat_str(#name)
                 .concat_bool(true);
         }
 
-        #lift_ref_impl_spec {
+        unsafe #lift_ref_impl_spec {
             type LiftType = ::std::sync::Arc<dyn #trait_ident>;
         }
     }

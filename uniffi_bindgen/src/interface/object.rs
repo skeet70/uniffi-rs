@@ -232,7 +232,7 @@ impl From<uniffi_meta::ObjectMetadata> for Object {
             documentation: None,
             constructors: Default::default(),
             methods: Default::default(),
-            uniffi_traits: meta.uniffi_traits.into_iter().map(Into::into).collect(),
+            uniffi_traits: Default::default(),
             ffi_func_free: FfiFunction {
                 name: ffi_free_name,
                 ..Default::default()
@@ -602,6 +602,10 @@ impl Callable for Constructor {
     fn throws_type(&self) -> Option<Type> {
         self.throws_type().cloned()
     }
+
+    fn is_async(&self) -> bool {
+        false
+    }
 }
 
 impl Callable for Method {
@@ -615,6 +619,10 @@ impl Callable for Method {
 
     fn throws_type(&self) -> Option<Type> {
         self.throws_type().cloned()
+    }
+
+    fn is_async(&self) -> bool {
+        self.is_async
     }
 }
 

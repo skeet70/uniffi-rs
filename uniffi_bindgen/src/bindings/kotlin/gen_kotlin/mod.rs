@@ -66,8 +66,6 @@ impl Config {
 }
 
 impl BindingsConfig for Config {
-    const TOML_KEY: &'static str = "kotlin";
-
     fn update_from_ci(&mut self, ci: &ComponentInterface) {
         self.package_name
             .get_or_insert_with(|| format!("uniffi.{}", ci.namespace()));
@@ -144,11 +142,13 @@ impl<'a> TypeRenderer<'a> {
     }
 
     // Get the package name for an external type
-    fn external_type_package_name(&self, module_path: &str) -> String {
+    fn external_type_package_name(&self, module_path: &str, namespace: &str) -> String {
+        // config overrides are keyed by the crate name, default fallback is the namespace.
         let crate_name = module_path.split("::").next().unwrap();
         match self.kotlin_config.external_packages.get(crate_name) {
             Some(name) => name.clone(),
-            None => crate_name.to_string(),
+            // unreachable in library mode - all deps are in our config with correct namespace.
+            None => format!("uniffi.{namespace}"),
         }
     }
 
@@ -196,6 +196,7 @@ pub struct KotlinWrapper<'a> {
     ci: &'a ComponentInterface,
     type_helper_code: String,
     type_imports: BTreeSet<ImportRequirement>,
+    has_async_fns: bool,
 }
 
 impl<'a> KotlinWrapper<'a> {
@@ -208,6 +209,7 @@ impl<'a> KotlinWrapper<'a> {
             ci,
             type_helper_code,
             type_imports,
+            has_async_fns: ci.has_async_fns(),
         }
     }
 
@@ -216,6 +218,10 @@ impl<'a> KotlinWrapper<'a> {
             .iter_types()
             .map(|t| KotlinCodeOracle.find(t))
             .filter_map(|ct| ct.initialization_fn())
+            .chain(
+                self.has_async_fns
+                    .then(|| "uniffiRustFutureContinuationCallback.register".into()),
+            )
             .collect()
     }
 
@@ -300,10 +306,11 @@ impl KotlinCodeOracle {
             FfiType::ForeignCallback => "ForeignCallback".to_string(),
             FfiType::ForeignExecutorHandle => "USize".to_string(),
             FfiType::ForeignExecutorCallback => "UniFfiForeignExecutorCallback".to_string(),
-            FfiType::FutureCallback { return_type } => {
-                format!("UniFfiFutureCallback{}", Self::ffi_type_label(return_type))
+            FfiType::RustFutureHandle => "Pointer".to_string(),
+            FfiType::RustFutureContinuationCallback => {
+                "UniFffiRustFutureContinuationCallbackType".to_string()
             }
-            FfiType::FutureCallbackData => "USize".to_string(),
+            FfiType::RustFutureContinuationData => "USize".to_string(),
         }
     }
 }

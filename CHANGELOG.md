@@ -15,6 +15,7 @@
 [All changes in [[UnreleasedUniFFIVersion]]](https://github.com/mozilla/uniffi-rs/compare/v0.24.3...HEAD).
 
 ### What's new
+- Proc-macros can now expose standard Rust traits (eg, `Display`, `Eq`, etc)
 - Fixed issues when trying to combine UDL and procmacros in the same crate when the "namespace" is
   different from the crate name. This meant that the "ffi namespace" has changed to consistently be
   the crate name, rather than either the crate name or the namespace name depending on whether the
@@ -33,6 +34,8 @@
 - Proc-macros: Added support for ByRef arguments
 - Proc-macros: Implemented custom type conversion error handling (https://mozilla.github.io/uniffi-rs/udl/custom_types.html#error-handling-during-conversion)
 - Error types must now implement `Error + Send + Sync + 'static`.
+- Proc-macros: The `handle_unknown_callback_error` attribute is no longer needed for callback
+  interface errors
 
 ### What's Fixed
 

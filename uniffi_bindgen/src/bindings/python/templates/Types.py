@@ -91,7 +91,7 @@
 {%- when Type::Custom { name, module_path, builtin } %}
 {%- include "CustomType.py" %}
 
-{%- when Type::External { name, module_path, kind } %}
+{%- when Type::External { name, module_path, namespace, kind, tagged } %}
 {%- include "ExternalTemplate.py" %}
 
 {%- when Type::ForeignExecutor %}
@@ -100,7 +100,3 @@
 {%- else %}
 {%- endmatch %}
 {%- endfor %}
-
-{%- if ci.has_async_fns() %}
-{%- include "AsyncTypes.py" %}
-{%- endif %}
