@@ -178,7 +178,9 @@ fn traverse_module_tree<P: AsRef<Path>>(path: P) -> Result<String> {
                 path.as_ref().with_file_name(format!("{name}/mod.rs"))
             };
 
-            source_code_buff.push_str(&traverse_module_tree(to_traverse_further)?)
+            if to_traverse_further.exists() {
+                source_code_buff.push_str(&traverse_module_tree(to_traverse_further)?)
+            }
         }
     }
 
