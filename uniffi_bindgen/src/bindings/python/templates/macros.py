@@ -101,6 +101,8 @@ _rust_call(
 {%  if meth.is_async() %}
 
     def {{ py_method_name }}(self, {% call arg_list_decl(meth) %}):
+        {%- let func = meth -%}
+        {% include "MethodDocsTemplate.py" %}
         {%- call setup_args_extra_indent(meth) %}
         return _uniffi_rust_call_async(
             _UniffiLib.{{ meth.ffi_func().name() }}(
@@ -131,6 +133,8 @@ _rust_call(
 {%-         when Some with (return_type) %}
 
     def {{ py_method_name }}(self, {% call arg_list_decl(meth) %}) -> "{{ return_type|type_name }}":
+        {%- let func = meth -%}
+        {% include "MethodDocsTemplate.py" %}
         {%- call setup_args_extra_indent(meth) %}
         return {{ return_type|lift_fn }}(
             {% call to_ffi_call_with_prefix("self._pointer", meth) %}
@@ -139,6 +143,8 @@ _rust_call(
 {%-         when None %}
 
     def {{ py_method_name }}(self, {% call arg_list_decl(meth) %}):
+        {%- let func = meth -%}
+        {% include "MethodDocsTemplate.py" %}
         {%- call setup_args_extra_indent(meth) %}
         {% call to_ffi_call_with_prefix("self._pointer", meth) %}
 {%      endmatch %}

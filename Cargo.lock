@@ -2052,16 +2052,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uniffi_fixture_metadata"
-version = "0.1.0"
-dependencies = [
- "thiserror",
- "uniffi",
- "uniffi_core",
- "uniffi_meta",
-]
-
-[[package]]
 name = "uniffi_macros"
 version = "0.24.3"
 dependencies = [

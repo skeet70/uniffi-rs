@@ -7,7 +7,7 @@ use std::{collections::HashMap, fs::read_to_string, path::Path, str::FromStr};
 use anyhow::Result;
 use pulldown_cmark::{Event, HeadingLevel::H1, Parser, Tag};
 use syn::Attribute;
-use uniffi_meta::Checksum;
+use uniffi_meta::{AsType, Checksum};
 
 /// Function documentation.
 #[derive(Debug, Clone, PartialEq, Eq, Checksum)]
@@ -121,6 +121,26 @@ struct Impl {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+struct Trait {
+    /// The docs on the trait itself
+    description: String,
+    /// Methods documentation
+    methods: HashMap<String, Function>,
+}
+
+// TODO(murph): is this even necessary? Is there overlap with normal structures
+// or should I be creating a structure for the trait from the start
+impl Into<Structure> for Trait {
+    fn into(self) -> Structure {
+        Structure {
+            description: self.description,
+            members: HashMap::default(),
+            methods: self.methods,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct Documentation {
     pub functions: HashMap<String, Function>,
     pub structures: HashMap<String, Structure>,
@@ -195,6 +215,44 @@ pub fn extract_documentation(source_code: &str) -> Result<Documentation> {
     let mut structures = HashMap::new();
     let mut impls = HashMap::new();
 
+    // we build traits up first so we know they're all there to be used when encountering impls later
+    let mut traits: HashMap<String, Trait> = HashMap::new();
+
+    // first pass to get trait documentation only
+    for item in file.items.iter() {
+        match item {
+            syn::Item::Trait(item) => {
+                if let Some(description) = extract_doc_comment(&item.attrs) {
+                    let name = item.ident.to_string();
+                    let methods = item
+                        .items
+                        .iter()
+                        .filter_map(|item| {
+                            if let syn::TraitItem::Method(method) = item {
+                                let name = method.sig.ident.to_string();
+                                extract_doc_comment(&method.attrs).map(|doc| (name, doc))
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|(name, description)| {
+                            (name, Function::from_str(&description).unwrap())
+                        })
+                        .collect();
+
+                    traits.insert(
+                        name,
+                        Trait {
+                            description,
+                            methods,
+                        },
+                    );
+                }
+            }
+            _ => (), // other item types are ignored,
+        }
+    }
+
     for item in file.items.into_iter() {
         match item {
             syn::Item::Enum(item) => {
@@ -248,28 +306,50 @@ pub fn extract_documentation(source_code: &str) -> Result<Documentation> {
                 }
             }
             syn::Item::Impl(item) => {
-                if item.trait_.is_none() {
-                    if let syn::Type::Path(path) = *item.self_ty {
-                        let name = path.path.segments[0].ident.to_string();
-
-                        let methods = item
-                            .items
-                            .into_iter()
-                            .filter_map(|item| {
-                                if let syn::ImplItem::Method(method) = item {
+                if let syn::Type::Path(path) = *item.self_ty {
+                    let name = path.path.segments[0].ident.to_string();
+                    let maybe_trait_name = item.trait_.and_then(|t| match t {
+                        (None, syn::Path { segments, .. }, _) => {
+                            segments.first().map(|segment| segment.ident.to_string())
+                        }
+                        _ => None,
+                    });
+                    let methods: HashMap<String, Function> = item
+                        .items
+                        .into_iter()
+                        .filter_map(|inner_item| {
+                            if let syn::ImplItem::Method(method) = inner_item {
+                                // if this is a trait impl, pull the doc from the trait for this method
+                                // TODO(murph): right now the trait method comment shows up on CloakedAiInterface in Kotlin and nowhere in Python
+                                // comments made directly on the impl for methods don't show up either
+                                if let Some(trait_name) = &maybe_trait_name {
+                                    let method_name = method.sig.ident.to_string();
+                                    traits
+                                        .get(trait_name)
+                                        .and_then(|trait_doc| trait_doc.methods.get(&method_name))
+                                        .map(|method_doc| {
+                                            (method_name, method_doc.description.clone())
+                                        })
+                                } else {
+                                    // if this isn't a trait impl (or there wasn't a doc for the trait method), get the
+                                    // doc directly on the method
                                     let name = method.sig.ident.to_string();
                                     extract_doc_comment(&method.attrs).map(|doc| (name, doc))
-                                } else {
-                                    None
                                 }
-                            })
-                            .map(|(name, description)| {
-                                (name, Function::from_str(&description).unwrap())
-                            })
-                            .collect();
-
-                        impls.insert(name, Impl { methods });
-                    }
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|(name, description)| {
+                            (name, Function::from_str(&description).unwrap())
+                        })
+                        .collect();
+                    impls
+                        .entry(name)
+                        .and_modify(|i: &mut Impl| 
+                            // this is safe because impls can't have conflicting names for the same struct
+                            i.methods.extend(methods.clone()))
+                        .or_insert(Impl { methods });
                 }
             }
             syn::Item::Fn(item) => {
@@ -286,6 +366,11 @@ pub fn extract_documentation(source_code: &str) -> Result<Documentation> {
         if let Some(structure) = structures.get_mut(&name) {
             structure.methods = impl_.methods;
         }
+    }
+
+    // TODO(murph): this isn't being consumed how I thought it would. Check trait output in attached AST
+    for (name, trait_) in traits {
+            structures.insert(name, trait_.into());
     }
 
     Ok(Documentation {
@@ -404,6 +489,12 @@ mod tests {
                 }
             }
 
+            impl Animal for Person {
+                fn eat(&self, food: String) -> String {
+                    format!("{} ate {food}.", self.get_name())
+                }
+            }
+
             /// Create hello message to a pet.
             ///
             /// # Arguments
@@ -427,6 +518,12 @@ mod tests {
 
                 /// A letter 'C'.
                 C,
+            }
+
+            /// Functionality common to animals.
+            pub trait Animal {
+                /// Get a message about the Animal eating.
+                fn eat(&self, food: String) -> String;
             }
         }
         .to_string();
@@ -471,6 +568,18 @@ mod tests {
                 return_description: None,
             },
         );
+        methods.insert(
+            "eat".to_string(),
+            Function {
+                description: indoc! {"
+                Get a message about the Animal eating.
+            "}
+                .trim()
+                .to_string(),
+                arguments_descriptions: HashMap::new(),
+                return_description: None,
+            },
+        );
 
         structures.insert(
             "Person".to_string(),
@@ -505,6 +614,29 @@ mod tests {
                 description: "Create hello message to a pet.\n".to_string(),
                 arguments_descriptions,
                 return_description: Some("Hello message to a pet.\n".to_string()),
+            },
+        );
+
+        let mut methods = HashMap::new();
+        methods.insert(
+            "eat".to_string(),
+            Function {
+                description: indoc! {"
+                Get a message about the Animal eating.
+            "}
+                .trim()
+                .to_string(),
+                arguments_descriptions: HashMap::new(),
+                return_description: None,
+            },
+        );
+
+        structures.insert(
+            "Animal".to_string(),
+            Structure {
+                description: "Functionality common to animals.".to_string(),
+                members: HashMap::new(),
+                methods,
             },
         );
 
