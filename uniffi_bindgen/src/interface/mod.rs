@@ -982,17 +982,6 @@ impl ComponentInterface {
                 function.documentation = Some(doc);
             }
         }
-
-        // TODO(murph): this has a comment, but that comment isn't being attached in places where I'd expect it to
-        // primary current test case is on the produced Kotlin interface of the same name. The trait comment _is_
-        // showing up on the class object of the same name next to the interface. Was this class object being produced
-        // before my code?
-        dbg!(&self
-            .objects
-            .iter()
-            .filter(|o| o.name == "CloakedAiDecryptOps".to_string())
-            .next()
-            .unwrap());
     }
 }
 

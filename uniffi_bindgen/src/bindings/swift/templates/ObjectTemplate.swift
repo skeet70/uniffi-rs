@@ -1,4 +1,5 @@
 {%- let obj = ci|get_object_definition(name) %}
+{% let struct = obj %}{% include "StructureDocsTemplate.swift" %}
 public protocol {{ obj.name() }}Protocol {
     {% for meth in obj.methods() -%}
     {%- let func = meth -%}
@@ -50,6 +51,8 @@ public class {{ type_name }}: {{ obj.name() }}Protocol {
     {% for meth in obj.methods() -%}
     {%- if meth.is_async() %}
 
+    {%- let func = meth -%}
+    {%- include "FunctionDocsTemplate.swift" %}
     public func {{ meth.name()|fn_name }}({%- call swift::arg_list_decl(meth) -%}) async {% call swift::throws(meth) %}{% match meth.return_type() %}{% when Some with (return_type) %} -> {{ return_type|type_name }}{% when None %}{% endmatch %} {
         return {% call swift::try(meth) %} await uniffiRustCallAsync(
             rustFutureFunc: {

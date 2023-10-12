@@ -3,6 +3,7 @@
 {{- self.add_import("java.util.concurrent.atomic.AtomicLong") }}
 {{- self.add_import("java.util.concurrent.atomic.AtomicBoolean") }}
 
+{% let struct = obj %}{% include "StructureDocsTemplate.kt" %}
 public interface {{ type_name }}Interface {
     {% for meth in obj.methods() -%}
     {%- let func = meth -%}
@@ -55,6 +56,8 @@ class {{ type_name }}(
     }
 
     {% for meth in obj.methods() -%}
+    {%- let func = meth -%}
+    {%- include "FunctionDocsTemplate.kt" -%}
     {%- match meth.throws_type() -%}
     {%- when Some with (throwable) %}
     @Throws({{ throwable|error_type_name }}::class)
