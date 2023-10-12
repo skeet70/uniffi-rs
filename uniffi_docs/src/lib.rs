@@ -128,8 +128,6 @@ struct Trait {
     methods: HashMap<String, Function>,
 }
 
-// TODO(murph): is this even necessary? Is there overlap with normal structures
-// or should I be creating a structure for the trait from the start
 impl Into<Structure> for Trait {
     fn into(self) -> Structure {
         Structure {
@@ -320,8 +318,6 @@ pub fn extract_documentation(source_code: &str) -> Result<Documentation> {
                         .filter_map(|inner_item| {
                             if let syn::ImplItem::Method(method) = inner_item {
                                 // if this is a trait impl, pull the doc from the trait for this method
-                                // TODO(murph): right now the trait method comment shows up on CloakedAiInterface in Kotlin and nowhere in Python
-                                // comments made directly on the impl for methods don't show up either
                                 if let Some(trait_name) = &maybe_trait_name {
                                     let method_name = method.sig.ident.to_string();
                                     traits
@@ -368,7 +364,6 @@ pub fn extract_documentation(source_code: &str) -> Result<Documentation> {
         }
     }
 
-    // TODO(murph): this isn't being consumed how I thought it would. Check trait output in attached AST
     for (name, trait_) in traits {
             structures.insert(name, trait_.into());
     }

@@ -9,7 +9,6 @@ class {{ type_name }}(Exception):
 
 _UniffiTemp{{ type_name }} = {{ type_name }}
 
-# TODO(murph): do the same for swift, kotlin, ruby
 class {{ type_name }}:  # type: ignore{% let struct = e %}{% include "StructureDocsTemplate.py" %}
     {%- for variant in e.variants() -%}
     {%- let variant_type_name = variant.name()|class_name -%}

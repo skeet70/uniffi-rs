@@ -1,13 +1,16 @@
+{% let struct = e %}{% include "StructureDocsTemplate.swift" %}
 public enum {{ type_name }} {
 
     {% if e.is_flat() %}
     {% for variant in e.variants() %}
+    {% include "EnumVariantDocsTemplate.swift" %}
     // Simple error enums only carry a message
     case {{ variant.name()|class_name }}(message: String)
     {% endfor %}
 
     {%- else %}
     {% for variant in e.variants() %}
+    {% include "EnumVariantDocsTemplate.swift" %}
     case {{ variant.name()|class_name }}{% if variant.fields().len() > 0 %}({% call swift::field_list_decl(variant) %}){% endif -%}
     {% endfor %}
 
