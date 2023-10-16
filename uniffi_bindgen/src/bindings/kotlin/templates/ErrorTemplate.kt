@@ -8,6 +8,7 @@ sealed class {{ type_name }}(message: String): Exception(message){% if contains_
         // Each variant is a nested class
         // Flat enums carries a string error message, so no special implementation is necessary.
         {% for variant in e.variants() -%}
+        {% include "EnumVariantDocsTemplate.kt" %}
         class {{ variant|error_variant|type_name }}(message: String) : {{ type_name }}(message)
         {% endfor %}
 
@@ -20,6 +21,7 @@ sealed class {{ type_name }}(message: String): Exception(message){% if contains_
 sealed class {{ type_name }}: Exception(){% if contains_object_references %}, Disposable {% endif %} {
     // Each variant is a nested class
     {% for variant in e.variants() -%}
+    {% include "EnumVariantDocsTemplate.kt" %}
     {%- let variant_name = variant|error_variant|type_name %}
     class {{ variant_name }}(
         {% for field in variant.fields() -%}
@@ -40,7 +42,6 @@ sealed class {{ type_name }}: Exception(){% if contains_object_references %}, Di
     override fun destroy() {
         when(this) {
             {%- for variant in e.variants() %}
-            {% include "EnumVariantDocsTemplate.kt" %}
             is {{ type_name }}.{{ variant|error_variant|type_name }} -> {
                 {%- if variant.has_fields() %}
                 {% call kt::destroy_fields(variant) %}
