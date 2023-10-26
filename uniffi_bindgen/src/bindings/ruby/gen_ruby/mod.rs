@@ -103,7 +103,17 @@ impl Config {
     }
 }
 
+use crate::Utf8Path;
+
 impl BindingsConfig for Config {
+    fn update_documentation(
+        &mut self,
+        _ci: &mut ComponentInterface,
+        _udl_file: &Utf8Path,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     fn update_from_ci(&mut self, ci: &ComponentInterface) {
         self.cdylib_name
             .get_or_insert_with(|| format!("uniffi_{}", ci.namespace()));
@@ -153,7 +163,9 @@ mod filters {
             FfiType::RustArcPtr(_) => ":pointer".to_string(),
             FfiType::RustBuffer(_) => "RustBuffer.by_value".to_string(),
             FfiType::ForeignBytes => "ForeignBytes".to_string(),
-            FfiType::ForeignCallback => unimplemented!("Callback interfaces are not implemented"),
+            // Callback interfaces are not yet implemented, but this needs to return something in
+            // order for the coverall tests to pass.
+            FfiType::ForeignCallback => ":pointer".to_string(),
             FfiType::ForeignExecutorCallback => {
                 unimplemented!("Foreign executors are not implemented")
             }

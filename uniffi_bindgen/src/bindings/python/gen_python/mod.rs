@@ -75,6 +75,8 @@ pub struct Config {
     cdylib_name: Option<String>,
     #[serde(default)]
     custom_types: HashMap<String, CustomTypeConfig>,
+    #[serde(default)]
+    external_packages: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -94,9 +96,28 @@ impl Config {
             "uniffi".into()
         }
     }
+
+    /// Get the package name for a given external namespace.
+    pub fn module_for_namespace(&self, ns: &str) -> String {
+        let ns = ns.to_string().to_snake_case();
+        match self.external_packages.get(&ns) {
+            None => format!(".{ns}"),
+            Some(value) if value.is_empty() => ns,
+            Some(value) => format!("{value}.{ns}"),
+        }
+    }
 }
+use crate::Utf8Path;
 
 impl BindingsConfig for Config {
+    fn update_documentation(
+        &mut self,
+        _ci: &mut ComponentInterface,
+        _udl_file: &Utf8Path,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     fn update_from_ci(&mut self, ci: &ComponentInterface) {
         self.cdylib_name
             .get_or_insert_with(|| format!("uniffi_{}", ci.namespace()));
@@ -314,6 +335,21 @@ impl PythonCodeOracle {
             FfiType::RustFutureContinuationData => "ctypes.c_size_t".to_string(),
         }
     }
+
+    /// Get the name of the protocol and class name for an object.
+    ///
+    /// For struct impls, the class name is the object name and the protocol name is derived from that.
+    /// For trait impls, the protocol name is the object name, and the class name is derived from that.
+    fn object_names(&self, obj: &Object) -> (String, String) {
+        let class_name = self.class_name(obj.name());
+        match obj.imp() {
+            ObjectImpl::Struct => (format!("{class_name}Protocol"), class_name),
+            ObjectImpl::Trait => {
+                let protocol_name = format!("{class_name}Impl");
+                (class_name, protocol_name)
+            }
+        }
+    }
 }
 
 pub trait AsCodeType {
@@ -433,5 +469,10 @@ pub mod filters {
     /// Get the idiomatic Python rendering of an individual enum variant.
     pub fn enum_variant_py(nm: &str) -> Result<String, askama::Error> {
         Ok(PythonCodeOracle.enum_variant_name(nm))
+    }
+
+    /// Get the idiomatic Python rendering of an individual enum variant.
+    pub fn object_names(obj: &Object) -> Result<(String, String), askama::Error> {
+        Ok(PythonCodeOracle.object_names(obj))
     }
 }
