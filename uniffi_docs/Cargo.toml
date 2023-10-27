@@ -10,8 +10,7 @@ keywords = ["ffi", "bindgen", "docs"]
 
 [dependencies]
 anyhow = "1"
-# remove extra-traits when done debugging
-syn = { version = "1.0", features = ["full", "extra-traits"] }
+syn = { version = "1.0", features = ["full"] }
 pulldown-cmark = { version = "0.9.2"}
 uniffi_meta = { path = "../uniffi_meta", version = "=0.25.0" }
 
