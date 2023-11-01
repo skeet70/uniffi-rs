@@ -136,10 +136,6 @@ pub trait BindingsConfig: DeserializeOwned {
     /// config_map maps crate names to config instances. This is mostly used to set up external
     /// types.
     fn update_from_dependency_configs(&mut self, config_map: HashMap<&str, &Self>);
-
-    fn doc_generation_enabled(&self) -> bool {
-        false
-    }
 }
 
 /// Binding generator config with no members
@@ -515,10 +511,6 @@ impl BindingsConfig for Config {
                 .map(|(key, config)| (*key, &config.bindings.ruby))
                 .collect(),
         );
-    }
-
-    fn doc_generation_enabled(&self) -> bool {
-        self.bindings.doc_comments.unwrap_or_default()
     }
 }
 

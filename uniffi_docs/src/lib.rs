@@ -343,7 +343,7 @@ pub fn extract_documentation(source_code: &str) -> Result<Documentation> {
                     impls
                         .entry(name)
                         .and_modify(|i: &mut Impl| 
-                            // this is safe because impls can't have conflicting names for the same struct
+                            // this is safe because impls can't have conflicting method names for the same struct
                             i.methods.extend(methods.clone()))
                         .or_insert(Impl { methods });
                 }

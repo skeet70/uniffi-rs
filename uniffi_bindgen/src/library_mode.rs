@@ -100,12 +100,10 @@ pub fn generate_external_bindings<T: BindingGenerator>(
         }
     }
 
-    for source in sources.iter_mut() {
-        if source.config.doc_generation_enabled() {
-            let path = &source.package.manifest_path.with_file_name("src/lib.rs");
-            let documentation = uniffi_docs::extract_documentation_from_path(path)?;
-            source.ci.attach_documentation(documentation);
-        }
+    for source in &mut sources {
+        // Assumes a lib.rs for the source package containing bindings
+        let path = &source.package.manifest_path.with_file_name("src/lib.rs");
+        source.config.update_documentation(&mut source.ci, path)?;
         binding_generator.write_bindings(&source.ci, &source.config, out_dir)?;
     }
 
