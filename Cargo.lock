@@ -1687,6 +1687,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uniffi-fixture-byref-trait"
+version = "0.25.0"
+dependencies = [
+ "once_cell",
+ "thiserror",
+ "uniffi",
+]
+
+[[package]]
 name = "uniffi-fixture-callbacks"
 version = "0.22.0"
 dependencies = [

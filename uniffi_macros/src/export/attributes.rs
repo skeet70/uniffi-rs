@@ -12,6 +12,7 @@ pub struct ExportAttributeArguments {
     pub(crate) async_runtime: Option<AsyncRuntime>,
     pub(crate) callback_interface: Option<kw::callback_interface>,
     pub(crate) constructor: Option<kw::constructor>,
+    pub(crate) rust_impl_only: Option<kw::rust_impl_only>,
     // tried to make this a vec but that got messy quickly...
     pub(crate) trait_debug: Option<kw::Debug>,
     pub(crate) trait_display: Option<kw::Display>,
@@ -38,6 +39,11 @@ impl UniffiAttributeArgs for ExportAttributeArguments {
         } else if lookahead.peek(kw::callback_interface) {
             Ok(Self {
                 callback_interface: input.parse()?,
+                ..Self::default()
+            })
+        } else if lookahead.peek(kw::rust_impl_only) {
+            Ok(Self {
+                rust_impl_only: input.parse()?,
                 ..Self::default()
             })
         } else if lookahead.peek(kw::constructor) {
@@ -77,6 +83,7 @@ impl UniffiAttributeArgs for ExportAttributeArguments {
                 self.callback_interface,
                 other.callback_interface,
             )?,
+            rust_impl_only: either_attribute_arg(self.rust_impl_only, other.rust_impl_only)?,
             constructor: either_attribute_arg(self.constructor, other.constructor)?,
             trait_debug: either_attribute_arg(self.trait_debug, other.trait_debug)?,
             trait_display: either_attribute_arg(self.trait_display, other.trait_display)?,

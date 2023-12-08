@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 use std::sync::Arc;
 
-#[uniffi::export]
+#[uniffi::export(rust_impl_only)]
 pub trait ByrefButton: Send + Sync {
     fn name(&self, byref: &Other) -> String;
 }
@@ -20,7 +20,7 @@ pub struct BackButton {}
 impl BackButton {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
-        Arc::new(Self{})
+        Arc::new(Self {})
     }
 }
 

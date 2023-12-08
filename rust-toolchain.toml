@@ -5,7 +5,8 @@
 # * ./.circleci/config.yml which also specifies the rust versions used in CI.
 
 [toolchain]
-channel = "1.72.0"
+# channel = "1.72.0"
+channel = "nightly"
 targets = [
     "aarch64-linux-android",
     "armv7-linux-androideabi",

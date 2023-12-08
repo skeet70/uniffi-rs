@@ -3,6 +3,7 @@ target
 *.jar
 .vscode
 .idea
+.direnv
 xcuserdata
 docs/manual/src/internals/api
 examples/app/ios/Generated

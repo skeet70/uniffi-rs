@@ -25,6 +25,7 @@ pub(super) fn trait_impl(
         Span::call_site(),
     );
 
+    // TODO(murph): byref Other is present here
     let trait_impl_methods = items
         .iter()
         .map(|item| match item {
@@ -162,8 +163,10 @@ fn gen_method_impl(sig: &FnSignature, internals_ident: &Ident) -> syn::Result<To
         Some(ReceiverArg::Ref) => quote! { &self },
         Some(ReceiverArg::Arc) => quote! { self: Arc<Self> },
     };
-    let params = sig.params();
+    // TODO(murph): byref: <Other as ::uniffi::LiftRef<crate::UniFfiTag>>::LiftType at this point
+    let params = sig.params().collect::<Vec<_>>();
     let buf_ident = Ident::new("uniffi_args_buf", Span::call_site());
+    // TODO(murph): <<Other as ::uniffi::LiftRef<crate::UniFfiTag>>::LiftType as ::uniffi::Lower<crate::UniFfiTag>>::write at this point
     let write_exprs = sig.write_exprs(&buf_ident);
 
     Ok(quote! {
