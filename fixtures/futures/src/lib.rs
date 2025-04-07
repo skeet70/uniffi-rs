@@ -496,6 +496,7 @@ async fn cancel_delay_using_trait(obj: Arc<dyn AsyncParser>, delay_ms: i32) {
     });
     let future = Abortable::new(obj.delay(delay_ms), abort_registration);
     assert_eq!(future.await, Err(Aborted));
+    println!("after trait fn future returned");
 }
 
 uniffi::include_scaffolding!("futures");

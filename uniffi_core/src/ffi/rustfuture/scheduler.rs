@@ -61,6 +61,7 @@ impl Scheduler {
     }
 
     pub(super) fn wake(&mut self) {
+        println!("scheduler wake called {:?}", std::time::SystemTime::now());
         match self {
             // If we had a continuation set, then call it and transition to the `Empty` state.
             Self::Set(callback, old_data) => {
