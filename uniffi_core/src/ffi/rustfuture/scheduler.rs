@@ -61,7 +61,7 @@ impl Scheduler {
     }
 
     pub(super) fn wake(&mut self) {
-        println!("scheduler wake called {:?}", std::time::SystemTime::now());
+        println!("rust scheduler wake called {:?}", std::time::SystemTime::now());
         match self {
             // If we had a continuation set, then call it and transition to the `Empty` state.
             Self::Set(callback, old_data) => {
@@ -69,6 +69,7 @@ impl Scheduler {
                 let callback = *callback;
                 *self = Self::Empty;
                 callback(old_data, RustFuturePoll::MaybeReady);
+                println!("rust scheduler finished callback")
             }
             // If we were in the `Empty` state, then transition to `Waked`.  The next time `store`
             // is called, we will immediately call the continuation.
