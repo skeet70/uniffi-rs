@@ -80,7 +80,9 @@ impl Scheduler {
     }
 
     pub(super) fn cancel(&mut self) {
+        println!("rust scheduler cancel called {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
         if let Self::Set(callback, old_data) = mem::replace(self, Self::Cancelled) {
+            println!("rust scheduler cancel calling callback {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
             callback(old_data, RustFuturePoll::Ready);
         }
     }

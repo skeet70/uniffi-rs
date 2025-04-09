@@ -249,6 +249,7 @@ where
     }
 
     pub(super) fn free(self: Arc<Self>) {
+        println!("rust rustfuture free called {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
         // Call cancel() to send any leftover data to the continuation callback
         self.scheduler.lock().unwrap().cancel();
         // Ensure we drop our inner future, releasing all held references
