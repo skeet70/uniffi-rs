@@ -51,6 +51,7 @@ pub struct ForeignFuture {
 
 impl Drop for ForeignFuture {
     fn drop(&mut self) {
+        println!("rust foreign future has been dropped, calling foreign future's free");
         (self.free)(self.handle)
     }
 }

@@ -61,7 +61,7 @@ impl Scheduler {
     }
 
     pub(super) fn wake(&mut self) {
-        println!("rust scheduler wake called {:?}", std::time::SystemTime::now());
+        println!("rust scheduler wake called {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
         match self {
             // If we had a continuation set, then call it and transition to the `Empty` state.
             Self::Set(callback, old_data) => {
