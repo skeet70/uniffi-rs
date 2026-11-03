@@ -229,8 +229,46 @@ macro_rules! ffi_converter_rust_buffer_lift_and_lower {
 
 #[cfg(test)]
 mod test {
-    use super::{FfiConverter, UniFfiTag};
+    use super::{FfiConverter, Lift, Lower, RustBuffer, UniFfiTag};
+    use std::collections::HashMap;
     use std::time::{Duration, SystemTime};
+
+    fn lower_to_wire<T: Lower<UniFfiTag>>(value: T) -> Vec<u8> {
+        T::lower_into_rust_buffer(value).destroy_into_vec()
+    }
+
+    fn lift_from_wire<T: Lift<UniFfiTag>>(wire: &[u8]) -> anyhow::Result<T> {
+        T::try_lift_from_rust_buffer(RustBuffer::from_vec(wire.to_vec()))
+    }
+
+    #[test]
+    fn bytes_wire_format() {
+        let wire = [0, 0, 0, 3, 1, 2, 3];
+        assert_eq!(lower_to_wire(vec![1u8, 2, 3]), wire);
+        assert_eq!(lift_from_wire::<Vec<u8>>(&wire).unwrap(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn nested_bytes_wire_format() {
+        let seq = vec![vec![7u8], vec![]];
+        let seq_wire = [0, 0, 0, 2, 0, 0, 0, 1, 7, 0, 0, 0, 0];
+        assert_eq!(lower_to_wire(seq.clone()), seq_wire);
+        assert_eq!(lift_from_wire::<Vec<Vec<u8>>>(&seq_wire).unwrap(), seq);
+
+        let map = HashMap::from([("k".to_string(), vec![8u8, 9])]);
+        let map_wire = [0, 0, 0, 1, 0, 0, 0, 1, b'k', 0, 0, 0, 2, 8, 9];
+        assert_eq!(lower_to_wire(map.clone()), map_wire);
+        assert_eq!(
+            lift_from_wire::<HashMap<String, Vec<u8>>>(&map_wire).unwrap(),
+            map
+        );
+    }
+
+    #[test]
+    fn bytes_length_past_end_fails_to_lift() {
+        assert!(lift_from_wire::<Vec<u8>>(&[0, 0, 0, 4, 1, 2, 3]).is_err());
+        assert!(lift_from_wire::<Vec<Vec<u8>>>(&[0, 0, 0, 1, 0, 0, 0, 2, 1]).is_err());
+    }
 
     #[test]
     fn timestamp_roundtrip_post_epoch() {

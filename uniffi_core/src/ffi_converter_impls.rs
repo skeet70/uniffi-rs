@@ -67,7 +67,6 @@ macro_rules! impl_ffi_converter_for_num_primitive {
     };
 }
 
-impl_ffi_converter_for_num_primitive!(u8, metadata::codes::TYPE_U8, get_u8, put_u8);
 impl_ffi_converter_for_num_primitive!(i8, metadata::codes::TYPE_I8, get_i8, put_i8);
 impl_ffi_converter_for_num_primitive!(u16, metadata::codes::TYPE_U16, get_u16, put_u16);
 impl_ffi_converter_for_num_primitive!(i16, metadata::codes::TYPE_I16, get_i16, put_i16);
@@ -77,6 +76,41 @@ impl_ffi_converter_for_num_primitive!(u64, metadata::codes::TYPE_U64, get_u64, p
 impl_ffi_converter_for_num_primitive!(i64, metadata::codes::TYPE_I64, get_i64, put_i64);
 impl_ffi_converter_for_num_primitive!(f32, metadata::codes::TYPE_F32, get_f32, put_f32);
 impl_ffi_converter_for_num_primitive!(f64, metadata::codes::TYPE_F64, get_f64, put_f64);
+
+/// Sequences of `u8` (`Vec<u8>`, `bytes` in UDL) are read and written as a single block.
+unsafe impl<UT> FfiConverter<UT> for u8 {
+    type FfiType = u8;
+
+    fn lower(obj: u8) -> Self::FfiType {
+        obj
+    }
+
+    fn try_lift(v: Self::FfiType) -> Result<u8> {
+        Ok(v)
+    }
+
+    fn write(obj: u8, buf: &mut Vec<u8>) {
+        buf.put_u8(obj);
+    }
+
+    fn try_read(buf: &mut &[u8]) -> Result<u8> {
+        check_remaining(buf, 1)?;
+        Ok(buf.get_u8())
+    }
+
+    fn write_seq(items: Vec<u8>, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&items);
+    }
+
+    fn try_read_seq(buf: &mut &[u8], len: usize) -> Result<Vec<u8>> {
+        check_remaining(buf, len)?;
+        let (items, rest) = buf.split_at(len);
+        *buf = rest;
+        Ok(items.to_vec())
+    }
+
+    const TYPE_ID_META: MetadataBuffer = MetadataBuffer::from_code(metadata::codes::TYPE_U8);
+}
 
 /// Support for passing boolean values via the FFI.
 ///
@@ -342,9 +376,7 @@ unsafe impl<UT, T: Lower<UT>> Lower<UT> for Vec<T> {
         // TODO: would be nice not to panic here :-/
         let len = i32::try_from(obj.len()).unwrap();
         buf.put_i32(len); // We limit arrays to i32::MAX items
-        for item in obj {
-            <T as Lower<UT>>::write(item, buf);
-        }
+        <T as Lower<UT>>::write_seq(obj, buf);
     }
 
     fn lower(obj: Vec<T>) -> RustBuffer {
@@ -363,11 +395,7 @@ unsafe impl<UT, T: Lift<UT>> Lift<UT> for Vec<T> {
     fn try_read(buf: &mut &[u8]) -> Result<Vec<T>> {
         check_remaining(buf, 4)?;
         let len = usize::try_from(buf.get_i32())?;
-        let mut vec = Vec::with_capacity(len);
-        for _ in 0..len {
-            vec.push(<T as Lift<UT>>::try_read(buf)?)
-        }
-        Ok(vec)
+        <T as Lift<UT>>::try_read_seq(buf, len)
     }
 
     fn try_lift(buf: RustBuffer) -> Result<Vec<T>> {

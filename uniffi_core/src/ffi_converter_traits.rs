@@ -131,6 +131,24 @@ pub unsafe trait FfiConverter<UT>: Sized {
     /// from it (but will not mutate the actual contents of the slice).
     fn try_read(buf: &mut &[u8]) -> Result<Self>;
 
+    /// Write the items of a sequence, without its length prefix.
+    #[doc(hidden)]
+    fn write_seq(items: Vec<Self>, buf: &mut Vec<u8>) {
+        for item in items {
+            Self::write(item, buf);
+        }
+    }
+
+    /// Read `len` items of a sequence whose length prefix was already consumed.
+    #[doc(hidden)]
+    fn try_read_seq(buf: &mut &[u8], len: usize) -> Result<Vec<Self>> {
+        let mut vec = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(Self::try_read(buf)?);
+        }
+        Ok(vec)
+    }
+
     /// Type ID metadata, serialized into a [MetadataBuffer].
     const TYPE_ID_META: MetadataBuffer;
 }
@@ -227,6 +245,16 @@ pub unsafe trait Lift<UT>: Sized {
 
     fn try_read(buf: &mut &[u8]) -> Result<Self>;
 
+    /// See [FfiConverter::try_read_seq].
+    #[doc(hidden)]
+    fn try_read_seq(buf: &mut &[u8], len: usize) -> Result<Vec<Self>> {
+        let mut vec = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(Self::try_read(buf)?);
+        }
+        Ok(vec)
+    }
+
     /// Convenience method
     fn try_lift_from_rust_buffer(v: RustBuffer) -> Result<Self> {
         let vec = v.destroy_into_vec();
@@ -260,6 +288,14 @@ pub unsafe trait Lower<UT>: Sized {
     fn lower(obj: Self) -> Self::FfiType;
 
     fn write(obj: Self, buf: &mut Vec<u8>);
+
+    /// See [FfiConverter::write_seq].
+    #[doc(hidden)]
+    fn write_seq(items: Vec<Self>, buf: &mut Vec<u8>) {
+        for item in items {
+            Self::write(item, buf);
+        }
+    }
 
     /// Convenience method
     fn lower_into_rust_buffer(obj: Self) -> RustBuffer {
@@ -545,6 +581,10 @@ macro_rules! derive_ffi_traits {
             fn write(obj: Self, buf: &mut ::std::vec::Vec<u8>) {
                 <Self as $crate::FfiConverter<$ut>>::write(obj, buf)
             }
+
+            fn write_seq(items: ::std::vec::Vec<Self>, buf: &mut ::std::vec::Vec<u8>) {
+                <Self as $crate::FfiConverter<$ut>>::write_seq(items, buf)
+            }
         }
     };
 
@@ -559,6 +599,10 @@ macro_rules! derive_ffi_traits {
 
             fn try_read(buf: &mut &[u8]) -> $crate::deps::anyhow::Result<Self> {
                 <Self as $crate::FfiConverter<$ut>>::try_read(buf)
+            }
+
+            fn try_read_seq(buf: &mut &[u8], len: usize) -> $crate::deps::anyhow::Result<::std::vec::Vec<Self>> {
+                <Self as $crate::FfiConverter<$ut>>::try_read_seq(buf, len)
             }
         }
     };
