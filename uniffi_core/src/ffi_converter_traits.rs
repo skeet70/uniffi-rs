@@ -133,6 +133,7 @@ pub unsafe trait FfiConverter<UT>: Sized {
 
     /// Write the items of a sequence, without its length prefix.
     #[doc(hidden)]
+    #[inline]
     fn write_seq(items: Vec<Self>, buf: &mut Vec<u8>) {
         for item in items {
             Self::write(item, buf);
@@ -141,6 +142,7 @@ pub unsafe trait FfiConverter<UT>: Sized {
 
     /// Read `len` items of a sequence whose length prefix was already consumed.
     #[doc(hidden)]
+    #[inline]
     fn try_read_seq(buf: &mut &[u8], len: usize) -> Result<Vec<Self>> {
         let mut vec = Vec::with_capacity(len);
         for _ in 0..len {
@@ -247,6 +249,7 @@ pub unsafe trait Lift<UT>: Sized {
 
     /// See [FfiConverter::try_read_seq].
     #[doc(hidden)]
+    #[inline]
     fn try_read_seq(buf: &mut &[u8], len: usize) -> Result<Vec<Self>> {
         let mut vec = Vec::with_capacity(len);
         for _ in 0..len {
@@ -291,6 +294,7 @@ pub unsafe trait Lower<UT>: Sized {
 
     /// See [FfiConverter::write_seq].
     #[doc(hidden)]
+    #[inline]
     fn write_seq(items: Vec<Self>, buf: &mut Vec<u8>) {
         for item in items {
             Self::write(item, buf);
@@ -582,6 +586,7 @@ macro_rules! derive_ffi_traits {
                 <Self as $crate::FfiConverter<$ut>>::write(obj, buf)
             }
 
+            #[inline]
             fn write_seq(items: ::std::vec::Vec<Self>, buf: &mut ::std::vec::Vec<u8>) {
                 <Self as $crate::FfiConverter<$ut>>::write_seq(items, buf)
             }
@@ -601,6 +606,7 @@ macro_rules! derive_ffi_traits {
                 <Self as $crate::FfiConverter<$ut>>::try_read(buf)
             }
 
+            #[inline]
             fn try_read_seq(buf: &mut &[u8], len: usize) -> $crate::deps::anyhow::Result<::std::vec::Vec<Self>> {
                 <Self as $crate::FfiConverter<$ut>>::try_read_seq(buf, len)
             }
